@@ -1,0 +1,21 @@
+# Bỏ qua môi trường ảo Python
+env/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Bỏ qua dữ liệu
+data/raw/
+*.pkl
+
+# Bỏ qua các file bộ nhớ tạm của Python và Jupyter
+*.pyc
+.ipynb_checkpoints
+checkpoints/
+*.pth
+*.pt
+
+# Bỏ qua file cài đặt của VS Code
+.vscode/
