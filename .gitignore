@@ -1,9 +1,25 @@
+-----------------Authors-----------------
+*.xml
+*.log
+*.apk
+*.iml
+**/.vscode/
+**/.idea/
+*.pyc
+.DS_Store
+*.cfg
+*.sqlite3
+checkpoints/
+runs/
+__pycache__/
+*.npy
+*.so
+.rendered
+--------------------end-------------------
 # Bỏ qua môi trường ảo Python
 env/
-.venv/
 
 # Python cache
-__pycache__/
 *.py[cod]
 
 # Bỏ qua dữ liệu
@@ -13,9 +29,9 @@ data/raw/
 # Bỏ qua các file bộ nhớ tạm của Python và Jupyter
 *.pyc
 .ipynb_checkpoints
-checkpoints/
 *.pth
 *.pt
 
-# Bỏ qua file cài đặt của VS Code
-.vscode/
+# cppimport generated files
+code/sources/.rendered.sampling.cpp
+code/sources/sampling*.pyd
