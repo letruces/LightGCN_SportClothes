@@ -26,6 +26,10 @@ class BasicDataset(Dataset):
     @property
     def trainDataSize(self):
         raise NotImplementedError
+
+    @property
+    def valDict(self):
+        raise NotImplementedError
     
     @property
     def testDict(self):
@@ -59,7 +63,7 @@ class BasicDataset(Dataset):
         raise NotImplementedError
 
 class Loader(BasicDataset):
-    def __init__(self,config = world.config,path="../data/amazon-sports"):
+    def __init__(self,config = world.config,path="../data/amazon-sport-and-outdoors"):
         # train or val or test
         cprint(f'loading [{path}]')
         self.split = config['A_split']
@@ -148,6 +152,7 @@ class Loader(BasicDataset):
         self.items_D[self.items_D == 0.] = 1.
         # pre-calculate
         self._allPos = self.getUserPosItems(list(range(self.n_user)))
+        self.__valDict = self.__build_val()
         self.__testDict = self.__build_test()
         print(f"{world.dataset} is ready to go")
 
@@ -162,6 +167,10 @@ class Loader(BasicDataset):
     @property
     def trainDataSize(self):
         return self.trainDataSize
+    
+    @property
+    def valDict(self):
+        return self.__valDict
     
     @property
     def testDict(self):
@@ -230,6 +239,20 @@ class Loader(BasicDataset):
                 print("don't split the matrix")
         return self.Graph
 
+    def __build_val(self):
+        """
+        return:
+            dict: {user: [items]}
+        """
+        val_data = {}
+        for i, item in enumerate(self.valItem):
+            user = self.valUser[i]
+            if val_data.get(user):
+                val_data[user].append(item)
+            else:
+                val_data[user] = [item]
+        return val_data
+    
     def __build_test(self):
         """
         return:
