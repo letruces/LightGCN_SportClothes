@@ -123,25 +123,25 @@ def minibatch(*tensors, **kwargs):
             yield tuple(x[i:i + batch_size] for x in tensors)
 
 
-def shuffle(*arrays, **kwargs):
-    require_indices = kwargs.get('indices', False)
+# def shuffle(*arrays, **kwargs):
+#     require_indices = kwargs.get('indices', False)
 
-    if len(set(len(x) for x in arrays)) != 1:
-        raise ValueError('All inputs to shuffle must have '
-                         'the same length.')
+#     if len(set(len(x) for x in arrays)) != 1:
+#         raise ValueError('All inputs to shuffle must have '
+#                          'the same length.')
 
-    shuffle_indices = np.arange(len(arrays[0]))
-    np.random.shuffle(shuffle_indices)
+#     shuffle_indices = np.arange(len(arrays[0]))
+#     np.random.shuffle(shuffle_indices)
 
-    if len(arrays) == 1:
-        result = arrays[0][shuffle_indices]
-    else:
-        result = tuple(x[shuffle_indices] for x in arrays)
+#     if len(arrays) == 1:
+#         result = arrays[0][shuffle_indices]
+#     else:
+#         result = tuple(x[shuffle_indices] for x in arrays)
 
-    if require_indices:
-        return result, shuffle_indices
-    else:
-        return result
+#     if require_indices:
+#         return result, shuffle_indices
+#     else:
+#         return result
 
 class timer:
     """
