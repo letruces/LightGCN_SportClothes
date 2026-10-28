@@ -34,10 +34,13 @@ class BPRLoss:
     def __init__(self,
                  recmodel : PairWiseModel,
                  config : dict):
+        print("[BPR DEBUG 1] Enter BPRLoss", flush=True)
         self.model = recmodel
         self.weight_decay = config['decay']
         self.lr = config['lr']
+        print("[BPR DEBUG 2] Initializing Adam", flush=True)
         self.opt = optim.Adam(recmodel.parameters(), lr=self.lr)
+        print("[BPR DEBUG 4] BPRLoss initialized successfully", flush=True)
 
     def stageOne(self, users, pos, neg):
         loss, reg_loss = self.model.bpr_loss(users, pos, neg)
