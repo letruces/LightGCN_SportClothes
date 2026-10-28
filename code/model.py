@@ -92,43 +92,33 @@ class LightGCN(BasicModel):
     
     def computer(self):
         """
-        propagate methods for lightGCN
-        """  
-        # Bước 1: Lấy embedding ban đầu  
+        Propagate methods for LightGCN (Optimized)
+        """
+        print("========start computer=========",flush=True)
+        # 1. Lấy embedding ban đầu
         users_emb = self.embedding_user.weight
         items_emb = self.embedding_item.weight
-        all_emb = torch.cat([users_emb, items_emb])
-        embs = [all_emb]
+        all_emb = torch.cat([users_emb, items_emb], dim=0)
 
-        # Bước 2: Xử lý dropout
-        if self.config['dropout']:
-            if self.training:
-                print("droping")
-                g_droped = self.__dropout(self.keep_prob)
-            else:
-                g_droped = self.Graph        
+        if self.config.get('dropout', False) and self.training:
+            g_droped = self.__dropout(self.keep_prob)
         else:
-            g_droped = self.Graph    
+            g_droped = self.Graph
 
-        # Bước 3: Lan truyền embedding qua đồ thị
+        light_out = all_emb
         for layer in range(self.n_layers):
             if self.A_split:
-                temp_emb = []
-                for f in range(len(g_droped)):
-                    temp_emb.append(torch.sparse.mm(g_droped[f], all_emb))
-                side_emb = torch.cat(temp_emb, dim=0)
-                all_emb = side_emb
+                temp_emb = [torch.sparse.mm(g, all_emb) for g in g_droped]
+                all_emb = torch.cat(temp_emb, dim=0)
             else:
                 all_emb = torch.sparse.mm(g_droped, all_emb)
-            embs.append(all_emb)
+            
+            light_out = light_out + all_emb
 
-        # Bước 4: Tổng hợp embedding từ các tầng
-        embs = torch.stack(embs, dim=1)
-        #print(embs.size())
-        light_out = torch.mean(embs, dim=1)
+        light_out = light_out / (self.n_layers + 1)
 
-        # Bước 5: Tách người dùng và sản phẩm
         users, items = torch.split(light_out, [self.num_users, self.num_items])
+        print("============done computer===========")
         return users, items
     
     def getUsersRating(self, users):
@@ -150,22 +140,18 @@ class LightGCN(BasicModel):
         return users_emb, pos_emb, neg_emb, users_emb_ego, pos_emb_ego, neg_emb_ego
     
     def bpr_loss(self, users, pos, neg):
-        (users_emb, pos_emb, neg_emb, 
-        userEmb0,  posEmb0, negEmb0) = self.getEmbedding(users.long(), pos.long(), neg.long())
+        (users_emb, pos_emb, neg_emb, userEmb0,  posEmb0, negEmb0) = self.getEmbedding(users, pos, neg)
 
-        # Tính thành phần điều chỉnh L2
-        reg_loss = (1/2)*(userEmb0.norm(2).pow(2) + 
-                         posEmb0.norm(2).pow(2)  +
-                         negEmb0.norm(2).pow(2))/float(len(users))
+        reg_loss = (1/2) * (
+            (userEmb0 ** 2).sum() + 
+            (posEmb0 ** 2).sum()  + 
+            (negEmb0 ** 2).sum()
+        ) / float(len(users))
 
-        # Tính điểm của positive item
-        pos_scores = torch.mul(users_emb, pos_emb)
-        pos_scores = torch.sum(pos_scores, dim=1)
-        # Tính điểm của negative item
-        neg_scores = torch.mul(users_emb, neg_emb)
-        neg_scores = torch.sum(neg_scores, dim=1)
+        pos_scores = torch.sum(users_emb * pos_emb, dim=-1)
+        neg_scores = torch.sum(users_emb * neg_emb, dim=-1)
 
-        loss = torch.mean(torch.nn.functional.softplus(neg_scores - pos_scores))
+        loss = -torch.mean(torch.nn.functional.logsigmoid(pos_scores - neg_scores))
         
         return loss, reg_loss
        
