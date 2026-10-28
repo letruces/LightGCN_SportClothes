@@ -29,7 +29,7 @@ config['multicore'] = args.multicore
 config['lr'] = args.lr
 config['decay'] = args.decay
 config['pretrain'] = args.pretrain
-config['A_split'] = False
+config['A_split'] = True
 config['bigdata'] = False
 
 GPU = torch.cuda.is_available()

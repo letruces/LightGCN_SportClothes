@@ -27,9 +27,14 @@ if world.LOAD:
     except FileNotFoundError:
         print(f"{weight_file} not exists, start from beginning")
 Neg_k = 1
+print("DEBUG: Passed Neg_k", flush=True)
 
+print("DEBUG: Before TensorBoard initialization", flush=True)
+print("world.tensorboard =", world.tensorboard, flush=True)
 # init tensorboard
 if world.tensorboard:
+    print("DEBUG: Initializing TensorBoard", flush=True)
+    
     w : SummaryWriter = SummaryWriter(join(world.BOARD_PATH, time.strftime("%m-%d-%Hh%Mm%Ss-") + "-" + world.comment))
 else:
     w = None

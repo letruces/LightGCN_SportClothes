@@ -79,9 +79,9 @@ class Loader(BasicDataset):
         trainUniqueUsers, trainItem, trainUser = [], [], []
         valUniqueUsers, valItem, valUser = [], [], []
         testUniqueUsers, testItem, testUser = [], [], []
-        self.trainDataSize = 0
-        self.valDataSize = 0
-        self.testDataSize = 0
+        self._trainDataSize = 0
+        self._valDataSize = 0
+        self._testDataSize = 0
 
         with open(train_file) as f:
             for l in f.readlines():
@@ -94,7 +94,7 @@ class Loader(BasicDataset):
                     trainItem.extend(items)
                     self.m_item = max(self.m_item, max(items))
                     self.n_user = max(self.n_user, uid)
-                    self.trainDataSize += len(items)
+                    self._trainDataSize += len(items)
         self.trainUniqueUsers = np.array(trainUniqueUsers)
         self.trainUser = np.array(trainUser)
         self.trainItem = np.array(trainItem)
@@ -110,7 +110,7 @@ class Loader(BasicDataset):
                     valItem.extend(items)
                     self.m_item = max(self.m_item, max(items))
                     self.n_user = max(self.n_user, uid)
-                    self.valDataSize += len(items)
+                    self._valDataSize += len(items)
         self.valUniqueUsers = np.array(valUniqueUsers)
         self.valUser = np.array(valUser)
         self.valItem = np.array(valItem)
@@ -126,7 +126,7 @@ class Loader(BasicDataset):
                     testItem.extend(items)
                     self.m_item = max(self.m_item, max(items))
                     self.n_user = max(self.n_user, uid)
-                    self.testDataSize += len(items)
+                    self._testDataSize += len(items)
         self.m_item += 1
         self.n_user += 1
         self.testUniqueUsers = np.array(testUniqueUsers)
@@ -166,12 +166,20 @@ class Loader(BasicDataset):
     
     @property
     def trainDataSize(self):
-        return self.trainDataSize
-    
+        return self._trainDataSize
+
+    @property
+    def valDataSize(self):
+        return self._valDataSize
+
+    @property
+    def testDataSize(self):
+        return self._testDataSize
+
     @property
     def valDict(self):
         return self.__valDict
-    
+
     @property
     def testDict(self):
         return self.__testDict
@@ -202,41 +210,93 @@ class Loader(BasicDataset):
 
     def getSparseGraph(self):
         print("loading adjacency matrix...")
+
         if self.Graph is None:
             try:
-                pre_adj_mat = sp.load_npz(self.path + '/s_pre_adj_mat.npz')
+                norm_adj = sp.load_npz(
+                    self.path + '/s_pre_adj_mat.npz'
+                )
                 print("successfully loaded...")
-                norm_adj = pre_adj_mat
-            except :
+
+            except Exception as e:
                 print("generating adjacency matrix...")
                 s = time()
-                adj_mat = sp.dok_matrix((self.n_users + self.m_items, self.n_users + self.m_items), dtype=np.float32)
-                adj_mat = adj_mat.tolil()
-                R = self.UserItemNet.tolil()
-                adj_mat[:self.n_users, self.n_users:] = R
-                adj_mat[self.n_users:, :self.n_users] = R.T
-                adj_mat = adj_mat.todok()
-                # adj_mat = adj_mat + sp.eye(adj_mat.shape[0])
-                
-                rowsum = np.array(adj_mat.sum(axis=1))
-                d_inv = np.power(rowsum, -0.5).flatten()
-                d_inv[np.isinf(d_inv)] = 0.
-                d_mat = sp.diags(d_inv)
-                
-                norm_adj = d_mat.dot(adj_mat)
-                norm_adj = norm_adj.dot(d_mat)
-                norm_adj = norm_adj.tocsr()
-                end = time()
-                print(f"costing {end-s}s, saved norm_mat...")
-                sp.save_npz(self.path + '/s_pre_adj_mat.npz', norm_adj)
 
-            if self.split == True:
+                # 1. Lấy tọa độ tương tác User-Item
+                user_dim = self.n_users
+                item_dim = self.m_items
+                n_nodes = user_dim + item_dim
+
+                R_coo = self.UserItemNet.tocoo()
+
+                users = R_coo.row
+                items = R_coo.col + user_dim
+
+                # 2. Xây dựng ma trận kề đối xứng
+                rows = np.concatenate([users, items])
+                cols = np.concatenate([items, users])
+
+                data = np.ones(len(rows), dtype=np.float32)
+
+                adj_mat = sp.coo_matrix(
+                    (data, (rows, cols)),
+                    shape=(n_nodes, n_nodes),
+                    dtype=np.float32
+                )
+
+                # 3. Tính bậc của các nút
+                rowsum = np.asarray(
+                    adj_mat.sum(axis=1)
+                ).flatten()
+
+                # 4. Tính D^(-1/2) an toàn
+                d_inv = np.zeros_like(
+                    rowsum, dtype=np.float32
+                )
+
+                mask = rowsum > 0
+                d_inv[mask] = np.power(
+                    rowsum[mask], -0.5
+                )
+
+                # 5. Chuẩn hóa từng phần tử khác 0
+                norm_data = (
+                    data * d_inv[rows] * d_inv[cols]
+                )
+
+                # 6. Chuyển sang CSR
+                norm_adj = sp.csr_matrix(
+                    (norm_data, (rows, cols)),
+                    shape=(n_nodes, n_nodes),
+                    dtype=np.float32
+                )
+
+                norm_adj.eliminate_zeros()
+
+                end = time()
+                print(
+                    f"costing {end - s:.2f}s, "
+                    "saved norm_mat..."
+                )
+
+                sp.save_npz(
+                    self.path + '/s_pre_adj_mat.npz',
+                    norm_adj
+                )
+
+            # 7. Chuyển ma trận sang Tensor trên thiết bị
+            if self.split:
                 self.Graph = self._split_A_hat(norm_adj)
                 print("done split matrix")
             else:
-                self.Graph = self._convert_sp_mat_to_sp_tensor(norm_adj)
-                self.Graph = self.Graph.coalesce().to(world.device)
+                self.Graph = self._convert_sp_mat_to_sp_tensor(
+                    norm_adj
+                )
+                self.Graph = self.Graph.coalesce().to(
+                    world.device
+                )
                 print("don't split the matrix")
+
         return self.Graph
 
     def __build_val(self):

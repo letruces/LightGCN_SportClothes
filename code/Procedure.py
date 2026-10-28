@@ -71,182 +71,275 @@ def test_one_batch(X):
             'ndcg':np.array(ndcg)}
         
             
+
 def Val(dataset, Recmodel, epoch, w=None, multicore=0):
     u_batch_size = world.config['test_u_batch_size']
-    dataset: utils.BasicDataset
     valDict: dict = dataset.valDict
-    Recmodel: model.LightGCN
 
-    # eval mode with no dropout
     Recmodel = Recmodel.eval()
     max_K = max(world.topks)
 
     if multicore == 1:
         pool = multiprocessing.Pool(CORES)
 
-    results = {'precision': np.zeros(len(world.topks)),
-               'recall': np.zeros(len(world.topks)),
-               'ndcg': np.zeros(len(world.topks))}
-    with torch.no_grad():
-        users = list(valDict.keys())
-        try:
-            assert u_batch_size <= len(users) / 10
-        except AssertionError:
-            print(f"val_u_batch_size is too big for this dataset, try a small one {len(users) // 10}")
+    results = {
+        'precision': np.zeros(len(world.topks)),
+        'recall': np.zeros(len(world.topks)),
+        'ndcg': np.zeros(len(world.topks))
+    }
 
-        users_list = []
-        rating_list = []
-        groundTrue_list = []
-        # auc_record = []
-        # ratings = []
-        total_batch = (len(users) + u_batch_size - 1) // u_batch_size
-        for batch_users in utils.minibatch(users, batch_size=u_batch_size):
-            allPos = dataset.getUserPosItems(batch_users)
-            groundTrue = [valDict[u] for u in batch_users]
-            batch_users_gpu = torch.Tensor(batch_users).long()
-            batch_users_gpu = batch_users_gpu.to(world.device)
+    try:
+        with torch.no_grad():
+            users = list(valDict.keys())
 
-            rating = Recmodel.getUsersRating(batch_users_gpu)
-            #rating = rating.cpu()
+            if len(users) == 0:
+                raise ValueError("Validation set is empty.")
 
-            exclude_index = []
-            exclude_items = []
-            for range_i, items in enumerate(allPos):
-                exclude_index.extend([range_i] * len(items))
-                exclude_items.extend(items)
-            rating[exclude_index, exclude_items] = -(1<<10)
+            if u_batch_size > len(users) / 10:
+                print(
+                    f"val_u_batch_size is too big for this dataset, "
+                    f"try a small one: {len(users) // 10}"
+                )
 
-            _, rating_K = torch.topk(rating, k=max_K)
-            rating = rating.cpu().numpy()
-            # aucs = [ 
-            #         utils.AUC(rating[i],
-            #                   dataset, 
-            #                   val_data) for i, val_data in enumerate(groundTrue)
-            #     ]
-            # auc_record.extend(aucs)
-            del rating
-            users_list.append(batch_users)
-            rating_list.append(rating_K.cpu())
-            groundTrue_list.append(groundTrue)
-        assert total_batch == len(users_list)
+            # Tính embedding toàn đồ thị một lần duy nhất
+            all_users, all_items = Recmodel.computer()
 
-        X = zip(rating_list, groundTrue_list)
-        if multicore == 1:
-            pre_results = pool.map(test_one_batch, X)
-        else:
-            pre_results = []
-            for x in X:
-                pre_results.append(test_one_batch(x))
+            rating_list = []
+            groundTrue_list = []
 
-        scale = float(u_batch_size/len(users))
+            total_batch = (
+                len(users) + u_batch_size - 1
+            ) // u_batch_size
 
-        for result in pre_results:
-            results['recall'] += result['recall']
-            results['precision'] += result['precision']
-            results['ndcg'] += result['ndcg']
-        results['recall'] /= float(len(users))
-        results['precision'] /= float(len(users))
-        results['ndcg'] /= float(len(users))
-        # results['auc'] = np.mean(auc_record)
+            for batch_users in utils.minibatch(
+                users, batch_size=u_batch_size
+            ):
+                allPos = dataset.getUserPosItems(batch_users)
+                groundTrue = [valDict[u] for u in batch_users]
 
-        if world.tensorboard:
-            w.add_scalars(f'Val/Recall@{world.topks}',
-                          {str(world.topks[i]): results['recall'][i] for i in range(len(world.topks))}, epoch)
-            w.add_scalars(f'Val/Precision@{world.topks}',
-                          {str(world.topks[i]): results['precision'][i] for i in range(len(world.topks))}, epoch)
-            w.add_scalars(f'Val/NDCG@{world.topks}',
-                          {str(world.topks[i]): results['ndcg'][i] for i in range(len(world.topks))}, epoch)
-        if multicore == 1:
-            pool.close()
+                batch_users_gpu = torch.as_tensor(
+                    batch_users,
+                    dtype=torch.long,
+                    device=world.device
+                )
+
+                users_emb = all_users[batch_users_gpu]
+                rating = Recmodel.f(
+                    torch.matmul(users_emb, all_items.t())
+                )
+
+                exclude_index = []
+                exclude_items = []
+
+                for range_i, items in enumerate(allPos):
+                    exclude_index.extend([range_i] * len(items))
+                    exclude_items.extend(items)
+
+                if exclude_index:
+                    rating[
+                        exclude_index, exclude_items
+                    ] = -(1 << 10)
+
+                # Lấy top-K
+                _, rating_K = torch.topk(
+                    rating, k=max_K
+                )
+
+                rating_list.append(rating_K.cpu())
+                groundTrue_list.append(groundTrue)
+
+            assert total_batch == len(rating_list)
+
+            X = list(zip(rating_list, groundTrue_list))
+
+            if multicore == 1:
+                pre_results = pool.map(test_one_batch, X)
+            else:
+                pre_results = [
+                    test_one_batch(x) for x in X
+                ]
+
+            for result in pre_results:
+                results['recall'] += result['recall']
+                results['precision'] += result['precision']
+                results['ndcg'] += result['ndcg']
+
+            results['recall'] /= float(len(users))
+            results['precision'] /= float(len(users))
+            results['ndcg'] /= float(len(users))
+
+            if world.tensorboard and w is not None:
+                w.add_scalars(
+                    f'Val/Recall@{world.topks}',
+                    {
+                        str(world.topks[i]): results['recall'][i]
+                        for i in range(len(world.topks))
+                    },
+                    epoch
+                )
+
+                w.add_scalars(
+                    f'Val/Precision@{world.topks}',
+                    {
+                        str(world.topks[i]): results['precision'][i]
+                        for i in range(len(world.topks))
+                    },
+                    epoch
+                )
+
+                w.add_scalars(
+                    f'Val/NDCG@{world.topks}',
+                    {
+                        str(world.topks[i]): results['ndcg'][i]
+                        for i in range(len(world.topks))
+                    },
+                    epoch
+                )
+
         print(results)
         return results
+
+    finally:
+        if multicore == 1:
+            pool.close()
+            pool.join()
+
     
 def Test(dataset, Recmodel, epoch, w=None, multicore=0):
     u_batch_size = world.config['test_u_batch_size']
-    dataset: utils.BasicDataset
     testDict: dict = dataset.testDict
-    Recmodel: model.LightGCN
 
-    # eval mode with no dropout
+    # Chuyển mô hình sang chế độ đánh giá
     Recmodel = Recmodel.eval()
     max_K = max(world.topks)
 
     if multicore == 1:
         pool = multiprocessing.Pool(CORES)
 
-    results = {'precision': np.zeros(len(world.topks)),
-               'recall': np.zeros(len(world.topks)),
-               'ndcg': np.zeros(len(world.topks))}
-    with torch.no_grad():
-        users = list(testDict.keys())
-        try:
-            assert u_batch_size <= len(users) / 10
-        except AssertionError:
-            print(f"test_u_batch_size is too big for this dataset, try a small one {len(users) // 10}")
+    results = {
+        'precision': np.zeros(len(world.topks)),
+        'recall': np.zeros(len(world.topks)),
+        'ndcg': np.zeros(len(world.topks))
+    }
 
-        users_list = []
-        rating_list = []
-        groundTrue_list = []
-        # auc_record = []
-        # ratings = []
-        total_batch = (len(users) + u_batch_size - 1) // u_batch_size
-        for batch_users in utils.minibatch(users, batch_size=u_batch_size):
-            allPos = dataset.getUserPosItems(batch_users)
-            groundTrue = [testDict[u] for u in batch_users]
-            batch_users_gpu = torch.Tensor(batch_users).long()
-            batch_users_gpu = batch_users_gpu.to(world.device)
+    try:
+        with torch.no_grad():
+            users = list(testDict.keys())
 
-            rating = Recmodel.getUsersRating(batch_users_gpu)
-            #rating = rating.cpu()
+            if len(users) == 0:
+                raise ValueError("Test set is empty.")
 
-            exclude_index = []
-            exclude_items = []
-            for range_i, items in enumerate(allPos):
-                exclude_index.extend([range_i] * len(items))
-                exclude_items.extend(items)
-            rating[exclude_index, exclude_items] = -(1<<10)
+            if u_batch_size > len(users) / 10:
+                print(
+                    f"test_u_batch_size is too big for this dataset, "
+                    f"try a small one: {len(users) // 10}"
+                )
 
-            _, rating_K = torch.topk(rating, k=max_K)
-            rating = rating.cpu().numpy()
-            # aucs = [ 
-            #         utils.AUC(rating[i],
-            #                   dataset, 
-            #                   test_data) for i, test_data in enumerate(groundTrue)
-            #     ]
-            # auc_record.extend(aucs)
-            del rating
-            users_list.append(batch_users)
-            rating_list.append(rating_K.cpu())
-            groundTrue_list.append(groundTrue)
-        assert total_batch == len(users_list)
+            # Tính embedding toàn đồ thị một lần duy nhất
+            all_users, all_items = Recmodel.computer()
 
-        X = zip(rating_list, groundTrue_list)
-        if multicore == 1:
-            pre_results = pool.map(test_one_batch, X)
-        else:
-            pre_results = []
-            for x in X:
-                pre_results.append(test_one_batch(x))
+            rating_list = []
+            groundTrue_list = []
 
-        scale = float(u_batch_size/len(users))
+            total_batch = (
+                len(users) + u_batch_size - 1
+            ) // u_batch_size
 
-        for result in pre_results:
-            results['recall'] += result['recall']
-            results['precision'] += result['precision']
-            results['ndcg'] += result['ndcg']
-        results['recall'] /= float(len(users))
-        results['precision'] /= float(len(users))
-        results['ndcg'] /= float(len(users))
-        # results['auc'] = np.mean(auc_record)
-        
-        if world.tensorboard:
-            w.add_scalars(f'Test/Recall@{world.topks}',
-                          {str(world.topks[i]): results['recall'][i] for i in range(len(world.topks))}, epoch)
-            w.add_scalars(f'Test/Precision@{world.topks}',
-                          {str(world.topks[i]): results['precision'][i] for i in range(len(world.topks))}, epoch)
-            w.add_scalars(f'Test/NDCG@{world.topks}',
-                          {str(world.topks[i]): results['ndcg'][i] for i in range(len(world.topks))}, epoch)
-        if multicore == 1:
-            pool.close()
+            for batch_users in utils.minibatch(
+                users, batch_size=u_batch_size
+            ):
+                # Lấy các sản phẩm người dùng đã tương tác
+                allPos = dataset.getUserPosItems(batch_users)
+                groundTrue = [testDict[u] for u in batch_users]
+
+                batch_users_gpu = torch.as_tensor(
+                    batch_users,
+                    dtype=torch.long,
+                    device=world.device
+                )
+
+                # Tái sử dụng embedding đã tính
+                users_emb = all_users[batch_users_gpu]
+
+                rating = Recmodel.f(
+                    torch.matmul(users_emb, all_items.t())
+                )
+
+                # Loại các sản phẩm đã tương tác khỏi danh sách đề xuất
+                exclude_index = []
+                exclude_items = []
+
+                for range_i, items in enumerate(allPos):
+                    exclude_index.extend([range_i] * len(items))
+                    exclude_items.extend(items)
+
+                if exclude_index:
+                    rating[
+                        exclude_index, exclude_items
+                    ] = -(1 << 10)
+
+                # Lấy top-K sản phẩm
+                _, rating_K = torch.topk(
+                    rating, k=max_K
+                )
+
+                rating_list.append(rating_K.cpu())
+                groundTrue_list.append(groundTrue)
+
+            assert total_batch == len(rating_list)
+
+            X = list(zip(rating_list, groundTrue_list))
+
+            if multicore == 1:
+                pre_results = pool.map(test_one_batch, X)
+            else:
+                pre_results = [
+                    test_one_batch(x) for x in X
+                ]
+
+            # Tổng hợp các chỉ số đánh giá
+            for result in pre_results:
+                results['recall'] += result['recall']
+                results['precision'] += result['precision']
+                results['ndcg'] += result['ndcg']
+
+            results['recall'] /= float(len(users))
+            results['precision'] /= float(len(users))
+            results['ndcg'] /= float(len(users))
+
+            # Ghi kết quả vào TensorBoard nếu được bật
+            if world.tensorboard and w is not None:
+                w.add_scalars(
+                    f'Test/Recall@{world.topks}',
+                    {
+                        str(world.topks[i]): results['recall'][i]
+                        for i in range(len(world.topks))
+                    },
+                    epoch
+                )
+
+                w.add_scalars(
+                    f'Test/Precision@{world.topks}',
+                    {
+                        str(world.topks[i]): results['precision'][i]
+                        for i in range(len(world.topks))
+                    },
+                    epoch
+                )
+
+                w.add_scalars(
+                    f'Test/NDCG@{world.topks}',
+                    {
+                        str(world.topks[i]): results['ndcg'][i]
+                        for i in range(len(world.topks))
+                    },
+                    epoch
+                )
+
         print(results)
         return results
+
+    finally:
+        if multicore == 1:
+            pool.close()
+            pool.join()
