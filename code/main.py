@@ -3,7 +3,7 @@ import utils
 from world import cprint
 import torch
 import numpy as np
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 import time
 import Procedure
 from os.path import join
@@ -59,6 +59,7 @@ try:
         start = time.time()
 
         # 1. Huấn luyện mô hình bằng tập train
+        print('===========Start epoch================')
         output_information = Procedure.BPR_train_original(dataset, Recmodel, bpr, epoch, neg_k=Neg_k, w=w)
         print(f'EPOCH[{epoch + 1}/{world.TRAIN_epochs}] {output_information}')
 

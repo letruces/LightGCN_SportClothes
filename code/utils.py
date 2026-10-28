@@ -12,15 +12,23 @@ import random
 import os
 
 try:
-    from cppimport import imp_from_filepath
-    from os.path import join, dirname
-    path = join(dirname(__file__), "sources/sampling.cpp")
-    sampling = imp_from_filepath(path)
+    # 1. Thử import trực tiếp module sampling từ file sampling*.so đã biên dịch
+    import sampling
     sampling.seed(world.seed)
     sample_ext = True
-except:
-    world.cprint("Cpp extension not loaded")
-    sample_ext = False
+    print("Cpp extension loaded successfully!")
+except Exception as e:
+    try:
+        from cppimport import imp_from_filepath
+        from os.path import join, dirname
+        path = join(dirname(__file__), "sources/sampling.cpp")
+        sampling = imp_from_filepath(path)
+        sampling.seed(world.seed)
+        sample_ext = True
+        print("Cpp extension loaded via cppimport!")
+    except:
+        world.cprint("Cpp extension not loaded")
+        sample_ext = False
 
 class BPRLoss:
     def __init__(self,
