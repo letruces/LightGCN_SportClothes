@@ -19,10 +19,10 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
     Recmodel = recommend_model
     Recmodel.train()
     bpr: utils.BPRLoss = loss_class
-    print('===========start uniformSample_original================')
+    print('===========start uniformSample_original================', flush=True)
     with timer(name="Sample"):
         S = utils.UniformSample_original(dataset)
-    print('===========done uniformSample_original================')
+    print('===========done uniformSample_original================', flush=True)
     users = torch.Tensor(S[:, 0]).long()
     posItems = torch.Tensor(S[:, 1]).long()
     negItems = torch.Tensor(S[:, 2]).long()
@@ -35,7 +35,7 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
 
     total_batch = len(users) // world.config['bpr_batch_size'] + 1
     aver_loss = 0.
-    print('===========start minibatch================')
+    print('===========start minibatch================', flush=True)
     for (batch_i,
          (batch_users,
           batch_pos,
@@ -43,7 +43,6 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
                                                    posItems,
                                                    negItems,
                                                    batch_size=world.config['bpr_batch_size'])):
-        print('===========start stageOne================')
         cri = bpr.stageOne(batch_users, batch_pos, batch_neg)
         aver_loss += cri
 

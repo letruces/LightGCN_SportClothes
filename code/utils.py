@@ -15,7 +15,7 @@ try:
     import sampling
     sampling.seed(world.seed)
     sample_ext = True
-    print("Cpp extension loaded successfully!")
+    print("Cpp extension loaded successfully!", flush=True)
 except Exception as e:
     try:
         from cppimport import imp_from_filepath
@@ -24,9 +24,9 @@ except Exception as e:
         sampling = imp_from_filepath(path)
         sampling.seed(world.seed)
         sample_ext = True
-        print("Cpp extension loaded via cppimport!")
+        print("Cpp extension loaded via cppimport!", flush=True)
     except:
-        world.cprint("Cpp extension not loaded")
+        world.cprint("Cpp extension not loaded", flush=True)
         sample_ext = False
 
 class BPRLoss:
