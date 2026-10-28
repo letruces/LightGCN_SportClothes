@@ -94,7 +94,6 @@ class LightGCN(BasicModel):
         """
         Propagate methods for LightGCN (Optimized)
         """
-        print("========start computer=========",flush=True)
         # 1. Lấy embedding ban đầu
         users_emb = self.embedding_user.weight
         items_emb = self.embedding_item.weight
@@ -118,7 +117,6 @@ class LightGCN(BasicModel):
         light_out = light_out / (self.n_layers + 1)
 
         users, items = torch.split(light_out, [self.num_users, self.num_items])
-        print("============done computer===========")
         return users, items
     
     def getUsersRating(self, users):
