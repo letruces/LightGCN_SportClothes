@@ -15,10 +15,18 @@ import register
 from register import dataset
 
 Recmodel = register.MODELS[world.model_name](world.config, dataset)
+print("DEBUG 1: Before model.to()", flush=True)
 Recmodel = Recmodel.to(world.device)
-bpr = utils.BPRLoss(Recmodel, world.config)
+print(f"DEBUG 2: After model.to(), device={world.device}", flush=True)
 
+print("DEBUG 3: Before BPRLoss", flush=True)
+bpr = utils.BPRLoss(Recmodel, world.config)
+print("DEBUG 4: After BPRLoss", flush=True)
+
+print("DEBUG 5: Before getFileName", flush=True)    
 weight_file = utils.getFileName()
+print(f"DEBUG 6: Weight file = {weight_file}", flush=True)
+
 print(f"load and save to {weight_file}")
 if world.LOAD:
     try:
