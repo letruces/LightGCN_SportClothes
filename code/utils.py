@@ -12,7 +12,6 @@ import random
 import os
 
 try:
-    # 1. Thử import trực tiếp module sampling từ file sampling*.so đã biên dịch
     import sampling
     sampling.seed(world.seed)
     sample_ext = True
