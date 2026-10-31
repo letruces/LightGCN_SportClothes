@@ -5,6 +5,7 @@ import numpy as np
 from torch import log
 from dataloader import BasicDataset
 from time import time
+import model
 from model import LightGCN
 from model import PairWiseModel
 from sklearn.metrics import roc_auc_score
@@ -33,13 +34,13 @@ class BPRLoss:
     def __init__(self,
                  recmodel : PairWiseModel,
                  config : dict):
-        print("[BPR DEBUG 1] Enter BPRLoss", flush=True)
+        # print("[BPR DEBUG 1] Enter BPRLoss", flush=True)
         self.model = recmodel
         self.weight_decay = config['decay']
         self.lr = config['lr']
-        print("[BPR DEBUG 2] Initializing Adam", flush=True)
+        # print("[BPR DEBUG 2] Initializing Adam", flush=True)
         self.opt = optim.Adam(recmodel.parameters(), lr=self.lr)
-        print("[BPR DEBUG 4] BPRLoss initialized successfully", flush=True)
+        # print("[BPR DEBUG 4] BPRLoss initialized successfully", flush=True)
 
     def stageOne(self, users, pos, neg):
         loss, reg_loss = self.model.bpr_loss(users, pos, neg)
@@ -49,6 +50,10 @@ class BPRLoss:
         self.opt.zero_grad()
         loss.backward()
         self.opt.step()
+
+        print("BPR Loss:", loss.item())
+        print("Reg Loss:", reg_loss.item())
+        print("Visual Projection Gradient:", model.f_v.weight.grad.norm().item())
 
         return loss.cpu().item()
 

@@ -15,17 +15,11 @@ import register
 from register import dataset
 
 Recmodel = register.MODELS[world.model_name](world.config, dataset)
-print("DEBUG 1: Before model.to()", flush=True)
 Recmodel = Recmodel.to(world.device)
-print(f"DEBUG 2: After model.to(), device={world.device}", flush=True)
 
-print("DEBUG 3: Before BPRLoss", flush=True)
 bpr = utils.BPRLoss(Recmodel, world.config)
-print("DEBUG 4: After BPRLoss", flush=True)
 
-print("DEBUG 5: Before getFileName", flush=True)    
 weight_file = utils.getFileName()
-print(f"DEBUG 6: Weight file = {weight_file}", flush=True)
 
 print(f"load and save to {weight_file}")
 if world.LOAD:
@@ -35,13 +29,10 @@ if world.LOAD:
     except FileNotFoundError:
         print(f"{weight_file} not exists, start from beginning")
 Neg_k = 1
-print("DEBUG: Passed Neg_k", flush=True)
 
-print("DEBUG: Before TensorBoard initialization", flush=True)
 print("world.tensorboard =", world.tensorboard, flush=True)
 # init tensorboard
 if world.tensorboard:
-    print("DEBUG: Initializing TensorBoard", flush=True)
     
     w : SummaryWriter = SummaryWriter(join(world.BOARD_PATH, time.strftime("%m-%d-%Hh%Mm%Ss-") + "-" + world.comment))
 else:

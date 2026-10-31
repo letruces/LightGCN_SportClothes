@@ -20,10 +20,8 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
     Recmodel.train()
     bpr: utils.BPRLoss = loss_class
     
-    print('===========start uniformSample_original================', flush=True)
     with timer(name="Sample"):
         S = utils.UniformSample_original(dataset)
-    print('===========done uniformSample_original================', flush=True)
     
     users = torch.from_numpy(S[:, 0]).long().to(world.device)
     posItems = torch.from_numpy(S[:, 1]).long().to(world.device)
@@ -37,9 +35,7 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
     batch_size = world.config['bpr_batch_size']
     total_batch = len(users) // batch_size + 1
     aver_loss = 0.
-    
-    print('===========start minibatch================', flush=True)
-    
+        
     for batch_i, (batch_users, batch_pos, batch_neg) in enumerate(
         utils.minibatch(users, posItems, negItems, batch_size=batch_size)
     ):

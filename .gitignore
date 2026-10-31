@@ -30,8 +30,9 @@ data/raw/
 *.pyc
 .ipynb_checkpoints
 *.pth
-*.pt
 
 # cppimport generated files
 code/sources/.rendered.sampling.cpp
 code/sources/sampling*.pyd
+data/amazon-sport-and-outdoors/visual_features.pt
+data/amazon-sport-and-outdoors/visual_has_image.pt
