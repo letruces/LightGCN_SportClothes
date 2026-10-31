@@ -51,8 +51,8 @@ class BPRLoss:
         loss.backward()
         self.opt.step()
 
-        print("BPR Loss:", loss.item())
-        print("Reg Loss:", reg_loss.item())
+        # print("BPR Loss:", loss.item())
+        # print("Reg Loss:", reg_loss.item())
 
         return loss.cpu().item()
 
