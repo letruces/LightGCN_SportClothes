@@ -53,7 +53,6 @@ class BPRLoss:
 
         print("BPR Loss:", loss.item())
         print("Reg Loss:", reg_loss.item())
-        print("Visual Projection Gradient:", model.f_v.weight.grad.norm().item())
 
         return loss.cpu().item()
 
